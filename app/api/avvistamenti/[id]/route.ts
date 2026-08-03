@@ -17,8 +17,6 @@ interface RouteContext {
 export async function PUT(request: Request, context: RouteContext) {
   try {
     await connectDB();
-    const { user, error } = await requireUser();
-    if (error) return error;
 
     const { id } = await context.params;
     if (!mongoose.Types.ObjectId.isValid(id)) {
@@ -28,7 +26,7 @@ export async function PUT(request: Request, context: RouteContext) {
     const body = await request.json();
     const { _id, specie, userId: _uid, createdAt, updatedAt, ...datiAggiornabili } = body;
 
-    const record = await AvvistamentoModel.findOne(scopedFilter(user, { _id: id }));
+    const record = await AvvistamentoModel.findOne({ _id: id });
 
     if (!record) {
       return NextResponse.json({ error: "Avvistamento non trovato" }, { status: 404 });
@@ -50,15 +48,13 @@ export async function PUT(request: Request, context: RouteContext) {
 export async function DELETE(request: Request, context: RouteContext) {
   try {
     await connectDB();
-    const { user, error } = await requireUser();
-    if (error) return error;
 
     const { id } = await context.params;
     if (!mongoose.Types.ObjectId.isValid(id)) {
       return NextResponse.json({ error: "ID non valido" }, { status: 400 });
     }
 
-    const risultato = await AvvistamentoModel.findOneAndDelete(scopedFilter(user, { _id: id }));
+    const risultato = await AvvistamentoModel.findOneAndDelete({ _id: id });
 
     if (!risultato) {
       return NextResponse.json({ error: "Avvistamento non trovato" }, { status: 404 });
