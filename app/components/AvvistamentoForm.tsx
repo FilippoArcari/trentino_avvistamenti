@@ -71,7 +71,7 @@ export function AvvistamentoForm() {
   // più per la nuova specie (es. da cervo a camoscio, "palcuto" non
   // esiste per camoscio) — reset alla prima tipologia valida.
   useEffect(() => {
-    if (!TIPOLOGIE_PER_SPECIE[specie].includes(tipologia as any)) {
+    if (!(TIPOLOGIE_PER_SPECIE[specie] as readonly string[]).includes(tipologia)) {
       setTipologia(TIPOLOGIE_PER_SPECIE[specie][0]);
     }
   }, [specie, tipologia]);
