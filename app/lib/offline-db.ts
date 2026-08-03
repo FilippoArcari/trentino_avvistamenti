@@ -77,6 +77,11 @@ export async function rimuoviSincronizzati() {
   await tx.done;
 }
 
+export async function eliminaLocale(clientId: string) {
+  const db = await getDB();
+  await db.delete("outbox", clientId);
+}
+
 /** Best-effort: chiede al browser di non fare eviction dello storage.
  *  Su Safari/iOS l'esito è meno garantito che su Chrome — vedi nota
  *  sui limiti PWA iOS. Non blocca il funzionamento se fallisce. */

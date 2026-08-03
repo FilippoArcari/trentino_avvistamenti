@@ -36,7 +36,7 @@ export async function POST(request: Request) {
 
     const Model = MODELS_PER_SPECIE[body.specie as keyof typeof MODELS_PER_SPECIE];
     const doc = await Model.create(body); // Mongoose valida `tipologia` contro l'enum del discriminator
-
+    
     return NextResponse.json(doc, { status: 201 });
   } catch (error) {
     console.error("[POST /api/avvistamenti] Error:", error);

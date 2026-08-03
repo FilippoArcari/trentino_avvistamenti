@@ -1,11 +1,12 @@
 // app/components/DashboardClient.tsx
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 import dynamic from "next/dynamic";
 import { GraficoSpecie } from "@/app/components/GraficoSpecie";
 import { Navbar } from "@/app/components/Navbar";
 import Link from "next/link";
+import { EditAvvistamentoModal, type EditableAvvistamento } from "@/app/components/EditAvvistamentoModal";
 
 // Leaflet richiede il DOM — import dinamico senza SSR
 const MappaAvvistamenti = dynamic(
@@ -39,8 +40,9 @@ export function DashboardClient() {
   const [avvistamenti, setAvvistamenti] = useState<Avvistamento[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [editingRecord, setEditingRecord] = useState<Avvistamento | null>(null);
 
-  useEffect(() => {
+  const loadData = useCallback(() => {
     fetch("/api/avvistamenti")
       .then((r) => {
         if (!r.ok) throw new Error("Errore nel caricamento dati");
@@ -55,6 +57,47 @@ export function DashboardClient() {
         setLoading(false);
       });
   }, []);
+
+  useEffect(() => {
+    loadData();
+  }, [loadData]);
+
+  const handleSaveEdit = async (updated: EditableAvvistamento) => {
+    if (!updated._id) return;
+    const res = await fetch(`/api/avvistamenti/${updated._id}`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        specie: updated.specie,
+        tipologia: updated.tipologia,
+        sesso: updated.sesso,
+      }),
+    });
+    if (res.ok) {
+      setEditingRecord(null);
+      loadData();
+    } else {
+      alert("Errore durante il salvataggio");
+    }
+  };
+
+  const handleDelete = async (id: string) => {
+    if (!navigator.onLine) {
+      alert("La modifica e l'eliminazione dei record online è disponibile solamente quando si è connessi a internet.");
+      return;
+    }
+    if (!confirm("Sei sicuro di voler eliminare questo avvistamento?")) return;
+    try {
+      const res = await fetch(`/api/avvistamenti/${id}`, { method: "DELETE" });
+      if (res.ok) {
+        loadData();
+      } else {
+        alert("Errore durante l'eliminazione");
+      }
+    } catch (e) {
+      alert("Errore di rete durante l'eliminazione");
+    }
+  };
 
   const cervi = avvistamenti.filter((a) => a.specie === "cervo").length;
   const camosci = avvistamenti.filter((a) => a.specie === "camoscio").length;
@@ -156,11 +199,27 @@ export function DashboardClient() {
             <PanelCard title="Ultimi avvistamenti">
               <TabellaAvvistamenti
                 avvistamenti={avvistamenti.slice(-10).reverse()}
+                onEdit={(record) => {
+                  if (!navigator.onLine) {
+                    alert("La modifica e l'eliminazione dei record online è disponibile solamente quando si è connessi a internet.");
+                    return;
+                  }
+                  setEditingRecord(record);
+                }}
+                onDelete={handleDelete}
               />
             </PanelCard>
           </div>
         )}
       </main>
+
+      {editingRecord && (
+        <EditAvvistamentoModal
+          initialData={editingRecord as unknown as EditableAvvistamento}
+          onSave={handleSaveEdit}
+          onCancel={() => setEditingRecord(null)}
+        />
+      )}
     </div>
   );
 }
@@ -240,8 +299,12 @@ const LABEL_TIPOLOGIA: Record<string, string> = {
 
 function TabellaAvvistamenti({
   avvistamenti,
+  onEdit,
+  onDelete,
 }: {
   avvistamenti: Avvistamento[];
+  onEdit?: (record: Avvistamento) => void;
+  onDelete?: (id: string) => void;
 }) {
   return (
     <div className="overflow-x-auto -mx-1">
@@ -253,6 +316,7 @@ function TabellaAvvistamenti({
             <th className="text-left py-2 px-2 font-medium">Tipologia</th>
             <th className="text-left py-2 px-2 font-medium">Sesso</th>
             <th className="text-left py-2 px-2 font-medium">Posizione</th>
+            {(onEdit || onDelete) && <th className="text-right py-2 px-2 font-medium">Azioni</th>}
           </tr>
         </thead>
         <tbody>
@@ -288,6 +352,26 @@ function TabellaAvvistamenti({
               <td className="py-3 px-2 text-[#8b9ab3] font-mono text-xs">
                 {a.posizione.lat.toFixed(4)}, {a.posizione.lng.toFixed(4)}
               </td>
+              {(onEdit || onDelete) && (
+                <td className="py-3 px-2 text-right whitespace-nowrap">
+                  {onEdit && (
+                    <button
+                      onClick={() => onEdit(a)}
+                      className="px-2 py-1 rounded-lg bg-white/5 hover:bg-white/10 text-white text-xs font-medium transition-colors mr-2"
+                    >
+                      Modifica
+                    </button>
+                  )}
+                  {onDelete && (
+                    <button
+                      onClick={() => onDelete(a._id)}
+                      className="px-2 py-1 rounded-lg bg-red-500/10 hover:bg-red-500/20 text-red-400 text-xs font-medium transition-colors"
+                    >
+                      Elimina
+                    </button>
+                  )}
+                </td>
+              )}
             </tr>
           ))}
         </tbody>
