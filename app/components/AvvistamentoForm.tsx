@@ -2,6 +2,8 @@
 "use client";
 
 import { useState, useMemo, useEffect } from "react";
+import dynamic from "next/dynamic";
+import type { LatLngLiteral } from "leaflet";
 import {
   TIPOLOGIE_PER_SPECIE,
   sessiAmmessi,
@@ -15,6 +17,11 @@ import {
   type AvvistamentoLocale,
 } from "@/app/lib/offline-db";
 import { useSync } from "@/app/hooks/useSync";
+
+const MapPickerModal = dynamic(
+  () => import("./MapPickerModal").then((m) => m.MapPickerModal),
+  { ssr: false }
+);
 
 const LABEL_SPECIE: Record<Specie, string> = {
   cervo: "Cervo",
@@ -56,6 +63,13 @@ export function AvvistamentoForm() {
   const [salvataggioOk, setSalvataggioOk] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [erroreGps, setErroreGps] = useState(false);
+
+  // Sorgente esplicita della posizione: distingue "GPS non ancora
+  // disponibile" (statoGeo) da "l'utente ha scelto un punto sulla
+  // mappa" — necessario perché handleSubmit deve sapere se può
+  // sovrascrivere `posizione` con una lettura GPS fresca o no.
+  const [sorgentePosizione, setSorgentePosizione] = useState<"gps" | "manuale">("gps");
+  const [showMapPicker, setShowMapPicker] = useState(false);
 
   const tipologieDisponibili = TIPOLOGIE_PER_SPECIE[specie];
   const sessiDisponibili = useMemo(
@@ -122,8 +136,10 @@ export function AvvistamentoForm() {
     setIsSaving(true);
     setErroreGps(false);
 
-    // Acquisizione GPS fresca al momento del salvataggio
-    const pos = await rilevaPosizione();
+    // Vecchio comportamento invariato: riacquisiamo il GPS fresco al
+    // submit. Unica eccezione: se l'utente ha scelto un punto sulla
+    // mappa, quella è la sorgente esplicita e non va sovrascritta.
+    const pos = sorgentePosizione === "manuale" ? posizione : await rilevaPosizione();
 
     if (!pos) {
       setErroreGps(true);
@@ -213,31 +229,70 @@ export function AvvistamentoForm() {
         )}
       </Section>
 
-      {/* Posizione GPS — solo informativa, viene acquisita al salvataggio */}
-      <Section label="Posizione GPS">
-        <div className="rounded-xl border border-white/5 bg-white/[0.03] px-4 py-3 min-h-[52px] flex items-center">
+      {/* Posizione */}
+      <Section label="Posizione">
+        <div className="rounded-xl border border-white/5 bg-white/[0.03] px-4 py-3 min-h-[52px] flex items-center justify-between gap-3">
           <div className="text-sm">
-            {statoGeo === "loading" && (
-              <span className="text-[#8b9ab3] animate-pulse">
-                Rilevamento in corso…
-              </span>
-            )}
-            {statoGeo === "ok" && posizione && (
+            {sorgentePosizione === "manuale" && posizione ? (
               <span className="font-mono text-[#6ab07a] text-xs tracking-wide">
-                {posizione.lat.toFixed(5)}, {posizione.lng.toFixed(5)}
+                {posizione.lat.toFixed(5)}, {posizione.lng.toFixed(5)}{" "}
+                <span className="text-[#8b9ab3]">(manuale)</span>
               </span>
-            )}
-            {(statoGeo === "error" || statoGeo === "manuale") && (
-              <span className="text-[#8b9ab3] text-xs">
-                La posizione verrà acquisita al salvataggio
-              </span>
-            )}
-            {statoGeo === "idle" && (
-              <span className="text-[#8b9ab3] text-xs">In attesa…</span>
+            ) : (
+              <>
+                {statoGeo === "loading" && (
+                  <span className="text-[#8b9ab3] animate-pulse">
+                    Rilevamento in corso…
+                  </span>
+                )}
+                {statoGeo === "ok" && posizione && (
+                  <span className="font-mono text-[#6ab07a] text-xs tracking-wide">
+                    {posizione.lat.toFixed(5)}, {posizione.lng.toFixed(5)}
+                  </span>
+                )}
+                {(statoGeo === "error" || statoGeo === "manuale") && (
+                  <span className="text-[#8b9ab3] text-xs">
+                    La posizione verrà acquisita al salvataggio
+                  </span>
+                )}
+                {statoGeo === "idle" && (
+                  <span className="text-[#8b9ab3] text-xs">In attesa…</span>
+                )}
+              </>
             )}
           </div>
+
+          <button
+            type="button"
+            onClick={() => setShowMapPicker(true)}
+            className="shrink-0 rounded-lg border border-white/10 px-3 py-1.5 text-xs font-medium text-[#8b9ab3] hover:text-white hover:border-white/20"
+          >
+            {sorgentePosizione === "manuale" ? "Modifica" : "Imposta manualmente"}
+          </button>
+
+          {sorgentePosizione === "manuale" && (
+            <button
+              type="button"
+              onClick={() => setSorgentePosizione("gps")}
+              className="shrink-0 rounded-lg border border-white/10 px-3 py-1.5 text-xs font-medium text-[#8b9ab3] hover:text-white hover:border-white/20"
+            >
+              Usa GPS
+            </button>
+          )}
         </div>
       </Section>
+
+      {showMapPicker && (
+        <MapPickerModal
+          posizioneIniziale={posizione}
+          onAnnulla={() => setShowMapPicker(false)}
+          onConferma={(p: LatLngLiteral) => {
+            setPosizione(p);
+            setSorgentePosizione("manuale");
+            setShowMapPicker(false);
+          }}
+        />
+      )}
 
       {/* Submit */}
       <button
