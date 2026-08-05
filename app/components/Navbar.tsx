@@ -16,9 +16,9 @@ export function Navbar() {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
 
   return (
-    <nav className="sticky top-0 z-50 bg-[#0d1117]/80 backdrop-blur-md border-b border-white/5">
+    <nav className="sticky top-0 z-50 bg-base-100/80 backdrop-blur-md border-b border-base-content/5">
       <div className="flex items-center justify-between px-6 py-4">
-        <span className="font-semibold text-lg tracking-tight text-white">
+        <span className="font-semibold text-lg tracking-tight text-base-content">
           Trentino Fauna
         </span>
 
@@ -32,8 +32,8 @@ export function Navbar() {
                 href={href}
                 className={`px-4 py-2 rounded-xl text-sm font-medium transition-all ${
                   active
-                    ? "bg-[#4a7c59]/20 text-[#6ab07a] border border-[#4a7c59]/30"
-                    : "text-[#8b9ab3] hover:text-white hover:bg-white/5"
+                    ? "bg-primary/20 text-success border border-primary/30"
+                    : "text-base-content/60 hover:text-base-content hover:bg-base-content/5"
                 }`}
               >
                 {label}
@@ -44,7 +44,7 @@ export function Navbar() {
 
         {/* Mobile Menu Toggle */}
         <button
-          className="md:hidden p-2 -mr-2 rounded-lg text-[#8b9ab3] hover:text-white hover:bg-white/5 transition-colors"
+          className="md:hidden p-2 -mr-2 rounded-lg text-base-content/60 hover:text-base-content hover:bg-base-content/5 transition-colors"
           onClick={() => setIsMenuOpen(!isMenuOpen)}
           aria-label="Toggle menu"
         >
@@ -62,7 +62,7 @@ export function Navbar() {
 
       {/* Mobile Menu */}
       {isMenuOpen && (
-        <div className="md:hidden border-t border-white/5 bg-[#0d1117]">
+        <div className="md:hidden border-t border-base-content/5 bg-base-100">
           <div className="flex flex-col px-4 py-3 gap-2">
             {LINKS.map(({ href, label }) => {
               const active = pathname === href;
@@ -73,8 +73,8 @@ export function Navbar() {
                   onClick={() => setIsMenuOpen(false)}
                   className={`px-4 py-3 rounded-xl text-base font-medium transition-all ${
                     active
-                      ? "bg-[#4a7c59]/20 text-[#6ab07a] border border-[#4a7c59]/30"
-                      : "text-[#8b9ab3] hover:text-white hover:bg-white/5"
+                      ? "bg-primary/20 text-success border border-primary/30"
+                      : "text-base-content/60 hover:text-base-content hover:bg-base-content/5"
                   }`}
                 >
                   {label}

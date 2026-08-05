@@ -1,12 +1,11 @@
 // app/lib/offline-db.ts
 import { openDB, type DBSchema, type IDBPDatabase } from "idb";
-import type { Specie, Sesso } from "./fauna-config";
 
 export interface AvvistamentoLocale {
   clientId: string; // UUID generato qui, chiave di idempotenza per la sync
-  specie: Specie;
+  specie: string;
   tipologia: string;
-  sesso: Sesso;
+  sesso: string;
   posizione: { lat: number; lng: number };
   timestamp: string; // ISO string: IndexedDB con Date nativi è più fragile da serializzare/clonare
   syncStatus: "pending" | "synced" | "error";

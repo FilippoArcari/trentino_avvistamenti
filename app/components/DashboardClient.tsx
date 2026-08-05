@@ -6,6 +6,7 @@ import dynamic from "next/dynamic";
 import { GraficoSpecie } from "@/app/components/GraficoSpecie";
 import { Navbar } from "@/app/components/Navbar";
 import Link from "next/link";
+import { hslaSpecie, etichettaSpecie } from "@/app/utils/speciesColor";
 import { EditAvvistamentoModal, type EditableAvvistamento } from "@/app/components/EditAvvistamentoModal";
 
 // Leaflet richiede il DOM — import dinamico senza SSR
@@ -28,8 +29,8 @@ export interface Avvistamento {
 
 function MapSkeleton() {
   return (
-    <div className="w-full h-full flex items-center justify-center bg-[#1a2332] rounded-2xl animate-pulse">
-      <span className="text-[#4a7c59] text-sm font-medium">
+    <div className="w-full h-full flex items-center justify-center bg-base-300 rounded-2xl animate-pulse">
+      <span className="text-primary text-sm font-medium">
         Caricamento mappa…
       </span>
     </div>
@@ -103,43 +104,25 @@ export function DashboardClient() {
   const camosci = avvistamenti.filter((a) => a.specie === "camoscio").length;
 
   return (
-    <div className="min-h-screen bg-[#0d1117] text-white font-sans">
+    <div className="min-h-screen bg-base-100 text-base-content font-sans">
       <Navbar />
 
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-10">
         {/* ── Header ─────────────────────────────────────────── */}
         <div className="mb-10">
-          <h1 className="text-3xl sm:text-4xl font-bold text-white tracking-tight mb-2">
+          <h1 className="text-3xl sm:text-4xl font-bold text-base-content tracking-tight mb-2">
             Dashboard Avvistamenti
           </h1>
-          <p className="text-[#8b9ab3] text-base">
+          <p className="text-base-content/60 text-base">
             Panoramica degli avvistamenti registrati in Trentino
           </p>
         </div>
 
-        {/* ── Stat cards ─────────────────────────────────────── */}
-        <div className="grid grid-cols-2 sm:grid-cols-3 gap-4 mb-10">
-          <StatCard
-            label="Totale avvistamenti"
-            value={loading ? "—" : avvistamenti.length.toString()}
-            accent="#4a7c59"
-          />
-          <StatCard
-            label="Cervi"
-            value={loading ? "—" : cervi.toString()}
-            accent="#6b8f5e"
-          />
-          <StatCard
-            label="Camosci"
-            value={loading ? "—" : camosci.toString()}
-            accent="#5e7a8f"
-            className="col-span-2 sm:col-span-1"
-          />
-        </div>
+        
 
         {/* ── Error state ────────────────────────────────────── */}
         {error && (
-          <div className="mb-8 rounded-2xl border border-red-500/20 bg-red-500/10 px-5 py-4 text-red-300 text-sm">
+          <div className="mb-8 rounded-2xl border border-error/20 bg-error/10 px-5 py-4 text-error text-sm">
             {error}
           </div>
         )}
@@ -147,11 +130,11 @@ export function DashboardClient() {
         {/* ── Empty state ─────────────────────────────────────── */}
         {!loading && !error && avvistamenti.length === 0 && (
           <div className="flex flex-col items-center justify-center py-24 gap-4">
-            <p className="text-[#8b9ab3] text-base text-center max-w-xs">
+            <p className="text-base-content/60 text-base text-center max-w-xs">
               Nessun avvistamento ancora registrato. Vai su{" "}
               <Link
                 href="/"
-                className="text-[#6ab07a] underline underline-offset-2"
+                className="text-success underline underline-offset-2"
               >
                 Registra
               </Link>{" "}
@@ -179,10 +162,10 @@ export function DashboardClient() {
             {/* Grafico a torta */}
             <div className="lg:col-span-1">
               <PanelCard title="Avvistamenti per specie">
-                <div className="h-[420px] flex flex-col">
+                <div className="flex flex-col">
                   {loading ? (
                     <div className="flex-1 flex items-center justify-center">
-                      <div className="w-40 h-40 rounded-full bg-white/5 animate-pulse" />
+                      <div className="w-40  rounded-full bg-base-content/5 animate-pulse" />
                     </div>
                   ) : (
                     <GraficoSpecie avvistamenti={avvistamenti} />
@@ -193,12 +176,12 @@ export function DashboardClient() {
           </div>
         )}
 
-        {/* ── Tabella recenti ─────────────────────────────────── */}
+        {/* ── Tabella primi avvistamenti ──────────────────────── */}
         {!loading && avvistamenti.length > 0 && (
           <div className="mt-6">
-            <PanelCard title="Ultimi avvistamenti">
+            <PanelCard title="Primi avvistamenti">
               <TabellaAvvistamenti
-                avvistamenti={avvistamenti.slice(-10).reverse()}
+                avvistamenti={avvistamenti.slice(0, 10)}
                 onEdit={(record) => {
                   if (!navigator.onLine) {
                     alert("La modifica e l'eliminazione dei record online è disponibile solamente quando si è connessi a internet.");
@@ -239,7 +222,7 @@ function StatCard({
 }) {
   return (
     <div
-      className={`rounded-2xl border border-white/5 bg-white/[0.03] p-5 flex items-center gap-4 ${className}`}
+      className={`rounded-2xl border border-base-content/5 bg-base-content/[0.03] p-5 flex items-center gap-4 ${className}`}
       style={{ boxShadow: `inset 0 0 0 1px ${accent}20` }}
     >
       <div
@@ -247,10 +230,10 @@ function StatCard({
         style={{ background: accent }}
       />
       <div>
-        <p className="text-2xl font-bold text-white leading-none mb-1">
+        <p className="text-2xl font-bold text-base-content leading-none mb-1">
           {value}
         </p>
-        <p className="text-xs text-[#8b9ab3] font-medium">{label}</p>
+        <p className="text-xs text-base-content/60 font-medium">{label}</p>
       </div>
     </div>
   );
@@ -264,9 +247,9 @@ function PanelCard({
   children: React.ReactNode;
 }) {
   return (
-    <div className="rounded-2xl border border-white/5 bg-white/[0.03] p-5 flex flex-col gap-4">
+    <div className="rounded-2xl border border-base-content/5 bg-base-content/[0.03] p-5 flex flex-col gap-4">
       <div className="flex items-center gap-2">
-        <h2 className="text-sm font-semibold text-[#c9d5e0] uppercase tracking-widest">
+        <h2 className="text-sm font-semibold text-base-content uppercase tracking-widest">
           {title}
         </h2>
       </div>
@@ -274,28 +257,6 @@ function PanelCard({
     </div>
   );
 }
-
-const LABEL_SPECIE: Record<string, string> = {
-  cervo: "Cervo",
-  camoscio: "Camoscio",
-  capriolo: "Capriolo",
-};
-const LABEL_SESSO: Record<string, string> = {
-  maschio: "Maschio",
-  femmina: "Femmina",
-  indeterminato: "Indeterminato",
-};
-const LABEL_TIPOLOGIA: Record<string, string> = {
-  palcuto: "Palcuto",
-  sottile: "Sottile",
-  fusone: "Fusone",
-  femmina: "Femmina",
-  piccolo: "Piccolo",
-  yearling: "Yearling",
-  adulto: "Adulto",
-  prima: "Prima",
-  seconda: "Seconda",
-};
 
 function TabellaAvvistamenti({
   avvistamenti,
@@ -310,7 +271,7 @@ function TabellaAvvistamenti({
     <div className="overflow-x-auto -mx-1">
       <table className="w-full text-sm">
         <thead>
-          <tr className="text-[#8b9ab3] text-xs uppercase tracking-wider border-b border-white/5">
+          <tr className="text-base-content/60 text-xs uppercase tracking-wider border-b border-base-content/5">
             <th className="text-left py-2 px-2 font-medium">Data</th>
             <th className="text-left py-2 px-2 font-medium">Specie</th>
             <th className="text-left py-2 px-2 font-medium">Tipologia</th>
@@ -323,9 +284,9 @@ function TabellaAvvistamenti({
           {avvistamenti.map((a) => (
             <tr
               key={a._id}
-              className="border-b border-white/[0.04] hover:bg-white/[0.02] transition-colors"
+              className="border-b border-base-content/[0.04] hover:bg-base-content/[0.02] transition-colors"
             >
-              <td className="py-3 px-2 text-[#c9d5e0]">
+              <td className="py-3 px-2 text-base-content">
                 {new Date(a.timestamp).toLocaleDateString("it-IT", {
                   day: "2-digit",
                   month: "short",
@@ -334,22 +295,22 @@ function TabellaAvvistamenti({
               </td>
               <td className="py-3 px-2">
                 <span
-                  className={`px-2 py-0.5 rounded-full text-xs font-medium ${
-                    a.specie === "cervo"
-                      ? "bg-[#4a7c59]/20 text-[#6ab07a]"
-                      : "bg-[#5e7a8f]/20 text-[#7aafc0]"
-                  }`}
+                  className="px-2 py-0.5 rounded-full text-xs font-medium"
+                  style={{
+                    backgroundColor: hslaSpecie(a.specie, 0.2),
+                    color: hslaSpecie(a.specie, 1),
+                  }}
                 >
-                  {LABEL_SPECIE[a.specie] ?? a.specie}
+                  {etichettaSpecie(a.specie)}
                 </span>
               </td>
-              <td className="py-3 px-2 text-[#c9d5e0] capitalize">
-                {LABEL_TIPOLOGIA[a.tipologia] ?? a.tipologia}
+              <td className="py-3 px-2 text-base-content capitalize">
+                {a.tipologia}
               </td>
-              <td className="py-3 px-2 text-[#c9d5e0]">
-                {LABEL_SESSO[a.sesso] ?? a.sesso}
+              <td className="py-3 px-2 text-base-content capitalize">
+                {a.sesso}
               </td>
-              <td className="py-3 px-2 text-[#8b9ab3] font-mono text-xs">
+              <td className="py-3 px-2 text-base-content/60 font-mono text-xs">
                 {a.posizione.lat.toFixed(4)}, {a.posizione.lng.toFixed(4)}
               </td>
               {(onEdit || onDelete) && (
@@ -357,7 +318,7 @@ function TabellaAvvistamenti({
                   {onEdit && (
                     <button
                       onClick={() => onEdit(a)}
-                      className="px-2 py-1 rounded-lg bg-white/5 hover:bg-white/10 text-white text-xs font-medium transition-colors mr-2"
+                      className="px-2 py-1 rounded-lg bg-base-content/5 hover:bg-base-content/10 text-base-content text-xs font-medium transition-colors mr-2"
                     >
                       Modifica
                     </button>
@@ -365,7 +326,7 @@ function TabellaAvvistamenti({
                   {onDelete && (
                     <button
                       onClick={() => onDelete(a._id)}
-                      className="px-2 py-1 rounded-lg bg-red-500/10 hover:bg-red-500/20 text-red-400 text-xs font-medium transition-colors"
+                      className="px-2 py-1 rounded-lg bg-error/10 hover:bg-error/20 text-error text-xs font-medium transition-colors"
                     >
                       Elimina
                     </button>

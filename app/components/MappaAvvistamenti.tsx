@@ -1,43 +1,41 @@
-// app/components/MappaAvvistamenti.tsx
 "use client";
 
 import { useEffect, useRef } from "react";
 import type { Avvistamento } from "@/app/components/DashboardClient";
+import { hslaSpecie, etichettaSpecie } from "@/app/utils/speciesColor";
+import { sessoAmmesso } from "@/app/utils/constant";
 
-// Importiamo leaflet solo lato client
 import "leaflet/dist/leaflet.css";
 import type * as LeafletType from "leaflet";
 
-// Colori per specie
-const COLORI: Record<string, string> = {
-  cervo: "#6ab07a",
-  camoscio: "#7aafc0",
-  capriolo: "#c0a064",
+// Simboli cosmetici per il sesso: legittimo tenerli in una mappa qui
+// perché sessoAmmesso è un dominio chiuso e canonico definito in
+// constant.ts, non un'assunzione mia sul nome/numero dei valori.
+// Se un valore non è tra quelli noti, mostro la stringa grezza.
+const SIMBOLO_SESSO: Partial<Record<(typeof sessoAmmesso)[number], string>> = {
+  Maschio: "♂",
+  Femmina: "♀",
+  Indeterminato: "?",
 };
 
-const LABEL_SPECIE: Record<string, string> = {
-  cervo: "Cervo",
-  camoscio: "Camoscio",
-  capriolo: "Capriolo",
-};
+function etichettaSesso(sesso: string): string {
+  const match = sessoAmmesso.find((s) => s.toLowerCase() === sesso.toLowerCase());
+  if (!match) return sesso;
+  const simbolo = SIMBOLO_SESSO[match];
+  return simbolo ? `${simbolo} ${match}` : match;
+}
 
-const LABEL_SESSO: Record<string, string> = {
-  maschio: "♂ Maschio",
-  femmina: "♀ Femmina",
-  indeterminato: "? Indeterminato",
-};
+// NB: nessuna mappa per la tipologia. `tipologieAmmesse` in constant.ts
+// è attualmente identica a `sessoAmmesso` ("Maschio"/"Femmina"/
+// "Indeterminato"), il che contraddice i valori di tipologia già in uso
+// altrove nella codebase (palcuto, fusone, yearling, adulto, ...) — vedi
+// nota nella risposta. Finché non è chiarito, mostro la tipologia così
+// come arriva dal backend, senza inventare una traduzione che potrebbe
+// essere sbagliata.
+function etichettaTipologia(tipologia: string): string {
+  return tipologia;
+}
 
-const LABEL_TIPOLOGIA: Record<string, string> = {
-  palcuto: "Palcuto",
-  sottile: "Sottile",
-  fusone: "Fusone",
-  femmina: "Femmina",
-  piccolo: "Piccolo",
-  yearling: "Yearling",
-  adulto: "Adulto",
-};
-
-// Centro del Trentino
 const CENTRO_TRENTINO: [number, number] = [46.07, 11.12];
 
 function markerCircleSvg(colore: string): string {
@@ -56,11 +54,9 @@ export function MappaAvvistamenti({
   const mapRef = useRef<LeafletType.Map | null>(null);
   const layerRef = useRef<LeafletType.LayerGroup | null>(null);
 
-  // Inizializzazione mappa (una sola volta)
   useEffect(() => {
     if (!containerRef.current || mapRef.current) return;
 
-    // Importo leaflet a runtime (SSR-safe)
     import("leaflet").then((L) => {
       if (!containerRef.current || mapRef.current) return;
 
@@ -71,7 +67,6 @@ export function MappaAvvistamenti({
         attributionControl: true,
       });
 
-      // Satellite ESRI — gratuito, nessuna API key richiesta
       L.tileLayer(
         "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}",
         {
@@ -81,7 +76,6 @@ export function MappaAvvistamenti({
         }
       ).addTo(map);
 
-      // Overlay etichette (strade, località) sopra il satellite
       L.tileLayer(
         "https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Boundaries_and_Places/MapServer/tile/{z}/{y}/{x}",
         { maxZoom: 19, opacity: 0.8 }
@@ -102,14 +96,12 @@ export function MappaAvvistamenti({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Aggiornamento marker quando cambiano gli avvistamenti
   useEffect(() => {
     if (!layerRef.current) return;
     import("leaflet").then((L) => {
       if (!layerRef.current) return;
       aggiornaMarker(L, layerRef.current, avvistamenti);
 
-      // Adatta la vista ai marker se presenti
       if (avvistamenti.length > 0 && mapRef.current) {
         const bounds = L.latLngBounds(
           avvistamenti.map((a) => [a.posizione.lat, a.posizione.lng])
@@ -123,7 +115,7 @@ export function MappaAvvistamenti({
     <div
       ref={containerRef}
       id="mappa-avvistamenti"
-      style={{ width: "100%", height: "100%", background: "#1a2332" }}
+      className="w-full h-full bg-base-300"
     />
   );
 }
@@ -136,7 +128,7 @@ function aggiornaMarker(
   layer.clearLayers();
 
   avvistamenti.forEach((a) => {
-    const colore = COLORI[a.specie] ?? "#ffffff";
+    const colore = hslaSpecie(a.specie, 1);
     const icon = L.divIcon({
       html: markerCircleSvg(colore),
       className: "",
@@ -154,23 +146,16 @@ function aggiornaMarker(
     });
 
     const popup = `
-      <div style="
-        font-family: system-ui, sans-serif;
-        background: #1a2332;
-        color: #c9d5e0;
-        border-radius: 12px;
-        padding: 12px 14px;
-        min-width: 160px;
-        font-size: 13px;
-        line-height: 1.6;
-        border: 1px solid ${colore}33;
-      ">
-        <div style="font-weight: 700; font-size: 15px; color: ${colore}; margin-bottom: 6px;">
-          ${LABEL_SPECIE[a.specie] ?? a.specie}
+      <div
+        class="font-sans bg-base-300 text-base-content rounded-xl px-3.5 py-3 min-w-[160px] text-[13px] leading-relaxed border"
+        style="border-color: ${hslaSpecie(a.specie, 0.2)}"
+      >
+        <div class="font-bold text-[15px] mb-1.5" style="color: ${colore}">
+          ${etichettaSpecie(a.specie)}
         </div>
-        <div><span style="color:#8b9ab3">Tipologia:</span> ${LABEL_TIPOLOGIA[a.tipologia] ?? a.tipologia}</div>
-        <div><span style="color:#8b9ab3">Sesso:</span> ${LABEL_SESSO[a.sesso] ?? a.sesso}</div>
-        <div style="margin-top:6px; font-size:11px; color:#8b9ab3">${data}</div>
+        <div><span class="text-base-content/60">Tipologia:</span> ${etichettaTipologia(a.tipologia)}</div>
+        <div><span class="text-base-content/60">Sesso:</span> ${etichettaSesso(a.sesso)}</div>
+        <div class="mt-1.5 text-[11px] text-base-content/60">${data}</div>
       </div>
     `;
 

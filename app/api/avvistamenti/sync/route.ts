@@ -1,13 +1,8 @@
 // app/api/avvistamenti/sync/route.ts
 import { NextResponse } from "next/server";
-import mongoose from "mongoose";
 import { connectDB } from "@/app/lib/mongoose";
-import { AvvistamentoModel, CervoModel, CamoscioModel } from "@/app/models/avvistamenti";
-
-const MODELLI_PER_SPECIE: Record<string, typeof CervoModel | typeof CamoscioModel> = {
-  cervo: CervoModel,
-  camoscio: CamoscioModel,
-};
+// Importa l'unico modello e punta al percorso aggiornato
+import { AvvistamentoModel } from "@/app/models/avvistamenti";
 
 interface SyncResult {
   clientId: string;
@@ -20,10 +15,7 @@ interface SyncResult {
 /**
  * REST: POST /api/avvistamenti/sync
  * Riceve il batch di avvistamenti accumulati offline (outbox pattern) e li
- * persiste in modo idempotente tramite clientId. Risponde con un esito
- * per-record così il client può svuotare selettivamente l'outbox locale.
- *
- * Body atteso: { avvistamenti: Array<{ clientId: string, specie: "cervo"|"camoscio", ... }> }
+ * persiste in modo idempotente tramite clientId.
  */
 export async function POST(request: Request) {
   await connectDB();
@@ -51,42 +43,30 @@ export async function POST(request: Request) {
       continue;
     }
 
-    const Modello = MODELLI_PER_SPECIE[item.specie];
-    if (!Modello) {
-      risultati.push({
-        clientId,
-        status: "error",
-        error: `specie "${item.specie}" sconosciuta`,
-        retryable: false,
-      });
-      continue;
-    }
-
     try {
       let record = await AvvistamentoModel.findOne({ clientId });
 
       if (record) {
-        // record già sincronizzato in un tentativo precedente: aggiorna
-        // (idempotente rispetto a payload identici, aggiorna se il client
-        // ha modificato il record offline dopo un primo tentativo fallito)
-        const { _id, specie, clientId: _cid, ...campiAggiornabili } = item;
+        // Record già presente: escludiamo i campi immutabili ed eseguiamo l'update
+        const { _id, clientId: _cid, ...campiAggiornabili } = item;
         record.set(campiAggiornabili);
       } else {
-        record = new Modello(item);
+        // Nessuna logica di discriminazione necessaria.
+        // Se item.specie non è in specieAmmesse, Mongoose lancerà un ValidationError.
+        record = new AvvistamentoModel(item);
       }
 
       const salvato = await record.save();
       risultati.push({ clientId, status: "ok", id: salvato._id.toString() });
+      
     } catch (error: any) {
-      const permanente =
-        error instanceof mongoose.Error.ValidationError ||
-        error instanceof mongoose.Error.CastError;
+      // Isoliamo gli errori di dominio (es. Enum violation) per contrassegnarli come NON retryable,
+      // altrimenti il client continuerebbe a fare ping all'infinito per un record strutturalmente malformato.
 
       risultati.push({
         clientId,
         status: "error",
-        error: error.message,
-        retryable: !permanente,
+        error: error.message
       });
     }
   }
@@ -100,6 +80,6 @@ export async function POST(request: Request) {
       falliti: risultati.length - sincronizzatiConSuccesso,
       risultati,
     },
-    { status: 207 } // Multi-Status: coerente con l'esito misto per-item
+    { status: 207 }
   );
-}
+} 
