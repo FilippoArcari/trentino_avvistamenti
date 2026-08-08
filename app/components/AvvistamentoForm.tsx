@@ -91,6 +91,14 @@ export function AvvistamentoForm({
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
+
+    // Guardia esplicita, non solo il disabled sul bottone: il disabled protegge
+    // dal click dell'utente, ma non da un submit programmatico (es. invio da
+    // tastiera su un campo del form) che aggirasse lo stato del bottone.
+    if (!tipologia) {
+      return;
+    }
+
     setIsSaving(true);
     setErroreGps(false);
     setErroreSalvataggio(false);
@@ -131,7 +139,7 @@ export function AvvistamentoForm({
     setStep(0);
     setSpecie("");
     setSesso("");
-    setTipologia(tipologieAmmesse[0] ?? "");
+    setTipologia("");
 
     flush();
   }
@@ -248,10 +256,14 @@ export function AvvistamentoForm({
             </button>
             <button
               type="submit"
-              disabled={isSaving}
+              disabled={isSaving || !tipologia}
               className="flex-1 rounded-xl bg-primary py-4 text-base font-semibold text-primary-content transition-all hover:brightness-90 active:scale-[0.98] disabled:opacity-60 disabled:cursor-not-allowed"
             >
-              {isSaving ? "Acquisizione GPS e salvataggio…" : "Salva avvistamento"}
+              {isSaving
+                ? "Acquisizione GPS e salvataggio…"
+                : !tipologia
+                ? "Seleziona una tipologia"
+                : "Salva avvistamento"}
             </button>
           </div>
         </form>

@@ -1,5 +1,6 @@
 // app/api/avvistamenti/sync/route.ts
 import { NextResponse } from "next/server";
+import mongoose from "mongoose";
 import { connectDB } from "@/app/lib/mongoose";
 // Importa l'unico modello e punta al percorso aggiornato
 import { AvvistamentoModel } from "@/app/models/avvistamenti";
@@ -58,15 +59,21 @@ export async function POST(request: Request) {
 
       const salvato = await record.save();
       risultati.push({ clientId, status: "ok", id: salvato._id.toString() });
-      
+
     } catch (error: any) {
-      // Isoliamo gli errori di dominio (es. Enum violation) per contrassegnarli come NON retryable,
-      // altrimenti il client continuerebbe a fare ping all'infinito per un record strutturalmente malformato.
+      // Isoliamo gli errori di dominio (es. Enum violation, campo required mancante) per
+      // contrassegnarli come NON retryable: sono strutturalmente malformati e ritentare
+      // non li risolverebbe mai. Tutto il resto (es. timeout di connessione al DB,
+      // errori di rete) è considerato transitorio e quindi retryable.
+      const erroreDiValidazione =
+        error instanceof mongoose.Error.ValidationError ||
+        error instanceof mongoose.Error.CastError;
 
       risultati.push({
         clientId,
         status: "error",
-        error: error.message
+        error: error.message,
+        retryable: !erroreDiValidazione,
       });
     }
   }
@@ -82,4 +89,4 @@ export async function POST(request: Request) {
     },
     { status: 207 }
   );
-} 
+}
