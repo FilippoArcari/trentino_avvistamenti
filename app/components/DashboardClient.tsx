@@ -8,6 +8,7 @@ import { Navbar } from "@/app/components/Navbar";
 import Link from "next/link";
 import { hslaSpecie, etichettaSpecie } from "@/app/utils/speciesColor";
 import { EditAvvistamentoModal, type EditableAvvistamento } from "@/app/components/EditAvvistamentoModal";
+import { type Sesso, sessoAmmesso, specieAmmesse, type Specie } from "../utils/constant";
 
 // Leaflet richiede il DOM — import dinamico senza SSR
 const MappaAvvistamenti = dynamic(
@@ -20,12 +21,14 @@ const MappaAvvistamenti = dynamic(
 
 export interface Avvistamento {
   _id: string;
-  specie: "cervo" | "camoscio";
+  specie: Specie;
   tipologia: string;
-  sesso: "maschio" | "femmina";
+  sesso: Sesso;
   posizione: { lat: number; lng: number };
   timestamp: string;
 }
+
+const PER_PAGINA = 10;
 
 function MapSkeleton() {
   return (
@@ -42,9 +45,24 @@ export function DashboardClient() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [editingRecord, setEditingRecord] = useState<Avvistamento | null>(null);
+  const [pagina, setPagina] = useState(1);
+  const [filtroSpecie, setFiltroSpecie] = useState<"" | Avvistamento["specie"]>("");
+  const [filtroSesso, setFiltroSesso] = useState<"" | Avvistamento["sesso"]>("");
+  const [filtroDataDa, setFiltroDataDa] = useState("");
+  const [filtroDataA, setFiltroDataA] = useState("");
 
   const loadData = useCallback(() => {
-    fetch("/api/avvistamenti")
+    setLoading(true);
+    setError(null);
+
+    const params = new URLSearchParams();
+    if (filtroSpecie) params.set("specie", filtroSpecie);
+    if (filtroSesso) params.set("sesso", filtroSesso);
+    if (filtroDataDa) params.set("da", filtroDataDa);
+    if (filtroDataA) params.set("a", filtroDataA);
+    const queryString = params.toString();
+
+    fetch(`/api/avvistamenti${queryString ? `?${queryString}` : ""}`)
       .then((r) => {
         if (!r.ok) throw new Error("Errore nel caricamento dati");
         return r.json();
@@ -57,9 +75,12 @@ export function DashboardClient() {
         setError(e instanceof Error ? e.message : "Errore sconosciuto");
         setLoading(false);
       });
-  }, []);
+  }, [filtroSpecie, filtroSesso, filtroDataDa, filtroDataA]);
 
+  // Rifà la fetch ogni volta che cambia un filtro (loadData cambia identità perché
+  // dipende dai filtri) e riporta la paginazione a pagina 1 sul nuovo set di risultati.
   useEffect(() => {
+    setPagina(1);
     loadData();
   }, [loadData]);
 
@@ -100,8 +121,24 @@ export function DashboardClient() {
     }
   };
 
-  const cervi = avvistamenti.filter((a) => a.specie === "cervo").length;
-  const camosci = avvistamenti.filter((a) => a.specie === "camoscio").length;
+  const cervi = avvistamenti.filter((a) => a.specie === specieAmmesse[0]).length;
+  const camosci = avvistamenti.filter((a) => a.specie === specieAmmesse[1]).length;
+
+  const totalePagine = Math.max(1, Math.ceil(avvistamenti.length / PER_PAGINA));
+  const paginaCorrente = Math.min(pagina, totalePagine);
+  const avvistamentiPagina = avvistamenti.slice(
+    (paginaCorrente - 1) * PER_PAGINA,
+    paginaCorrente * PER_PAGINA
+  );
+
+  const filtriAttivi = Boolean(filtroSpecie || filtroSesso || filtroDataDa || filtroDataA);
+
+  const resetFiltri = () => {
+    setFiltroSpecie("");
+    setFiltroSesso("");
+    setFiltroDataDa("");
+    setFiltroDataA("");
+  };
 
   return (
     <div className="min-h-screen bg-base-100 text-base-content font-sans">
@@ -118,8 +155,6 @@ export function DashboardClient() {
           </p>
         </div>
 
-        
-
         {/* ── Error state ────────────────────────────────────── */}
         {error && (
           <div className="mb-8 rounded-2xl border border-error/20 bg-error/10 px-5 py-4 text-error text-sm">
@@ -127,8 +162,8 @@ export function DashboardClient() {
           </div>
         )}
 
-        {/* ── Empty state ─────────────────────────────────────── */}
-        {!loading && !error && avvistamenti.length === 0 && (
+        {/* ── Empty state (nessun dato registrato, nessun filtro attivo) ── */}
+        {!loading && !error && avvistamenti.length === 0 && !filtriAttivi && (
           <div className="flex flex-col items-center justify-center py-24 gap-4">
             <p className="text-base-content/60 text-base text-center max-w-xs">
               Nessun avvistamento ancora registrato. Vai su{" "}
@@ -140,6 +175,37 @@ export function DashboardClient() {
               </Link>{" "}
               per inserire il primo.
             </p>
+          </div>
+        )}
+
+        {/* ── Barra filtri ─────────────────────────────────────── */}
+        {!loading && !error && (avvistamenti.length > 0 || filtriAttivi) && (
+          <FiltriBar
+            filtroSpecie={filtroSpecie}
+            filtroSesso={filtroSesso}
+            filtroDataDa={filtroDataDa}
+            filtroDataA={filtroDataA}
+            onSpecieChange={setFiltroSpecie}
+            onSessoChange={setFiltroSesso}
+            onDataDaChange={setFiltroDataDa}
+            onDataAChange={setFiltroDataA}
+            onReset={resetFiltri}
+            filtriAttivi={filtriAttivi}
+          />
+        )}
+
+        {/* ── Empty state (filtri senza risultati) ────────────── */}
+        {!loading && !error && avvistamenti.length === 0 && filtriAttivi && (
+          <div className="flex flex-col items-center justify-center py-24 gap-4">
+            <p className="text-base-content/60 text-base text-center max-w-xs">
+              Nessun avvistamento corrisponde ai filtri selezionati.
+            </p>
+            <button
+              onClick={resetFiltri}
+              className="text-success underline underline-offset-2 text-sm"
+            >
+              Azzera filtri
+            </button>
           </div>
         )}
 
@@ -176,12 +242,12 @@ export function DashboardClient() {
           </div>
         )}
 
-        {/* ── Tabella primi avvistamenti ──────────────────────── */}
+        {/* ── Tabella avvistamenti ──────────────────────── */}
         {!loading && avvistamenti.length > 0 && (
           <div className="mt-6">
-            <PanelCard title="Primi avvistamenti">
+            <PanelCard title={`Avvistamenti (${avvistamenti.length})`}>
               <TabellaAvvistamenti
-                avvistamenti={avvistamenti.slice(0, 10)}
+                avvistamenti={avvistamentiPagina}
                 onEdit={(record) => {
                   if (!navigator.onLine) {
                     alert("La modifica e l'eliminazione dei record online è disponibile solamente quando si è connessi a internet.");
@@ -190,6 +256,11 @@ export function DashboardClient() {
                   setEditingRecord(record);
                 }}
                 onDelete={handleDelete}
+              />
+              <Paginazione
+                paginaCorrente={paginaCorrente}
+                totalePagine={totalePagine}
+                onChange={setPagina}
               />
             </PanelCard>
           </div>
@@ -254,6 +325,97 @@ function PanelCard({
         </h2>
       </div>
       {children}
+    </div>
+  );
+}
+
+function FiltriBar({
+  filtroSpecie,
+  filtroSesso,
+  filtroDataDa,
+  filtroDataA,
+  onSpecieChange,
+  onSessoChange,
+  onDataDaChange,
+  onDataAChange,
+  onReset,
+  filtriAttivi,
+}: {
+  filtroSpecie: "" | Avvistamento["specie"];
+  filtroSesso: "" | Avvistamento["sesso"];
+  filtroDataDa: string;
+  filtroDataA: string;
+  onSpecieChange: (v: "" | Avvistamento["specie"]) => void;
+  onSessoChange: (v: "" | Avvistamento["sesso"]) => void;
+  onDataDaChange: (v: string) => void;
+  onDataAChange: (v: string) => void;
+  onReset: () => void;
+  filtriAttivi: boolean;
+}) {
+  return (
+    <div className="mb-6 rounded-2xl border border-base-content/5 bg-base-content/[0.03] p-4 flex flex-wrap items-end gap-4">
+      <div className="flex flex-col gap-1">
+        <label className="text-xs text-base-content/60 font-medium">Specie</label>
+        <select
+          value={filtroSpecie}
+          onChange={(e) => onSpecieChange(e.target.value as "" | Avvistamento["specie"])}
+          className="select select-sm select-bordered bg-base-100"
+        >
+          <option value="">Tutte</option>
+          {specieAmmesse.map((s) => (
+            <option key={s} value={s}>
+              {etichettaSpecie(s)}
+            </option>
+          ))}
+        </select>
+      </div>
+
+      <div className="flex flex-col gap-1">
+        <label className="text-xs text-base-content/60 font-medium">Sesso</label>
+        <select
+          value={filtroSesso}
+          onChange={(e) => onSessoChange(e.target.value as "" | Avvistamento["sesso"])}
+          className="select select-sm select-bordered bg-base-100"
+        >
+          <option value="">Tutti</option>
+          {sessoAmmesso.map((s) => (
+            <option key={s} value={s}>
+              {s.charAt(0).toUpperCase() + s.slice(1)}
+            </option>
+          ))}
+        </select>
+      </div>
+
+      <div className="flex flex-col gap-1">
+        <label className="text-xs text-base-content/60 font-medium">Dal</label>
+        <input
+          type="date"
+          value={filtroDataDa}
+          max={filtroDataA || undefined}
+          onChange={(e) => onDataDaChange(e.target.value)}
+          className="input input-sm input-bordered bg-base-100"
+        />
+      </div>
+
+      <div className="flex flex-col gap-1">
+        <label className="text-xs text-base-content/60 font-medium">Al</label>
+        <input
+          type="date"
+          value={filtroDataA}
+          min={filtroDataDa || undefined}
+          onChange={(e) => onDataAChange(e.target.value)}
+          className="input input-sm input-bordered bg-base-100"
+        />
+      </div>
+
+      {filtriAttivi && (
+        <button
+          onClick={onReset}
+          className="px-3 py-1.5 rounded-lg bg-error/10 hover:bg-error/20 text-error text-xs font-medium transition-colors"
+        >
+          Azzera filtri
+        </button>
+      )}
     </div>
   );
 }
@@ -337,6 +499,42 @@ function TabellaAvvistamenti({
           ))}
         </tbody>
       </table>
+    </div>
+  );
+}
+
+function Paginazione({
+  paginaCorrente,
+  totalePagine,
+  onChange,
+}: {
+  paginaCorrente: number;
+  totalePagine: number;
+  onChange: (pagina: number) => void;
+}) {
+  if (totalePagine <= 1) return null;
+
+  return (
+    <div className="flex items-center justify-between pt-2">
+      <button
+        onClick={() => onChange(paginaCorrente - 1)}
+        disabled={paginaCorrente === 1}
+        className="px-3 py-1.5 rounded-lg bg-base-content/5 hover:bg-base-content/10 disabled:opacity-30 disabled:cursor-not-allowed text-base-content text-xs font-medium transition-colors"
+      >
+        ← Precedente
+      </button>
+
+      <span className="text-xs text-base-content/60 font-medium">
+        Pagina {paginaCorrente} di {totalePagine}
+      </span>
+
+      <button
+        onClick={() => onChange(paginaCorrente + 1)}
+        disabled={paginaCorrente === totalePagine}
+        className="px-3 py-1.5 rounded-lg bg-base-content/5 hover:bg-base-content/10 disabled:opacity-30 disabled:cursor-not-allowed text-base-content text-xs font-medium transition-colors"
+      >
+        Successiva →
+      </button>
     </div>
   );
 }
