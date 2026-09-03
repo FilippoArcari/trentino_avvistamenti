@@ -23,9 +23,9 @@ interface AvvistamentoFormProps {
 }
 
 type StatoGeo = "idle" | "loading" | "ok" | "error" | "manuale";
-type Step = 0 | 1 | 2; // 0 = Specie, 1 = Sesso, 2 = Tipologia + posizione + submit
+type Step = 0 | 1 | 2 | 3; // 0 = Specie, 1 = Sesso, 2 = Tipologia + posizione + submit, 3 = Conferma
 
-const STEP_LABELS = ["Specie", "Sesso", "Tipologia"] as const;
+const STEP_LABELS = ["Specie", "Sesso", "Tipologia", "Conferma"] as const;
 
 export function AvvistamentoForm({
   specieAmmesse,
@@ -42,7 +42,6 @@ export function AvvistamentoForm({
 
   const [posizione, setPosizione] = useState<{ lat: number; lng: number } | null>(null);
   const [statoGeo, setStatoGeo] = useState<StatoGeo>("idle");
-  const [salvataggioOk, setSalvataggioOk] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [erroreGps, setErroreGps] = useState(false);
   const [erroreSalvataggio, setErroreSalvataggio] = useState(false);
@@ -131,17 +130,21 @@ export function AvvistamentoForm({
       return;
     }
 
-    setSalvataggioOk(true);
+    // Non resettiamo qui specie/sesso/tipologia/posizione: restano visibili
+    // nello step di conferma finché l'utente non decide esplicitamente di
+    // registrare un nuovo avvistamento tramite nuovoAvvistamento().
     setIsSaving(false);
-    setTimeout(() => setSalvataggioOk(false), 2500);
+    setStep(3);
+    flush();
+  }
 
-    // Reset per il prossimo avvistamento
+  function nuovoAvvistamento() {
     setStep(0);
     setSpecie("");
     setSesso("");
     setTipologia("");
-
-    flush();
+    setSorgentePosizione("gps");
+    rilevaPosizione();
   }
 
   return (
@@ -246,6 +249,18 @@ export function AvvistamentoForm({
             />
           )}
 
+          {erroreGps && (
+            <div className="rounded-xl border border-warning/30 bg-warning/10 px-4 py-3 text-center text-sm text-warning">
+              Impossibile acquisire la posizione GPS. Attiva la localizzazione e riprova.
+            </div>
+          )}
+
+          {erroreSalvataggio && (
+            <div className="rounded-xl border border-error/30 bg-error/10 px-4 py-3 text-center text-sm text-error">
+              Salvataggio non riuscito. Riprova — il dato non è stato registrato.
+            </div>
+          )}
+
           <div className="flex gap-3">
             <button
               type="button"
@@ -269,28 +284,31 @@ export function AvvistamentoForm({
         </form>
       )}
 
-      {/* Feedback: spostato fuori dal blocco step===2 perché il submit
-          resetta lo step a 0 nello stesso ciclio in cui imposta questi
-          stati — se restassero dentro il form, sparirebbero insieme ad
-          esso prima che l'utente possa vederli. */}
-      {erroreGps && (
-        <div className="rounded-xl border border-warning/30 bg-warning/10 px-4 py-3 text-center text-sm text-warning">
-          Impossibile acquisire la posizione GPS. Attiva la localizzazione e riprova.
-        </div>
-      )}
+      {step === 3 && (
+        <div className="flex flex-col gap-6">
+          <div className="rounded-2xl border border-success/30 bg-success/10 px-6 py-10 flex flex-col items-center gap-3 text-center">
+            <div className="flex h-14 w-14 items-center justify-center rounded-full bg-success/20 text-success text-2xl">
+              ✓
+            </div>
+            <h2 className="text-lg font-semibold text-base-content">
+              Avvistamento registrato
+            </h2>
+            <p className="text-sm text-base-content/60">
+              {specie} — {sesso} — {tipologia}
+              <br />
+              {inCorso
+                ? "Sincronizzazione in corso…"
+                : "Salvato localmente, verrà sincronizzato."}
+            </p>
+          </div>
 
-      {erroreSalvataggio && (
-        <div className="rounded-xl border border-error/30 bg-error/10 px-4 py-3 text-center text-sm text-error">
-          Salvataggio non riuscito. Riprova — il dato non è stato registrato.
-        </div>
-      )}
-
-      {salvataggioOk && (
-        <div className="rounded-xl border border-primary/30 bg-primary/10 px-4 py-3 text-center text-sm text-success">
-          Salvato
-          {inCorso
-            ? " — sincronizzazione in corso…"
-            : " localmente, verrà sincronizzato."}
+          <button
+            type="button"
+            onClick={nuovoAvvistamento}
+            className="w-full rounded-xl bg-primary py-4 text-base font-semibold text-primary-content transition-all hover:brightness-90 active:scale-[0.98]"
+          >
+            Nuovo avvistamento
+          </button>
         </div>
       )}
     </div>
@@ -300,15 +318,18 @@ export function AvvistamentoForm({
 // ── Step components ──────────────────────────────────────────────
 
 function StepIndicator({ step }: { step: Step }) {
+  const n = STEP_LABELS.length;
+  const frac = step / (n - 1);
+  const fillWidth =
+    frac === 0 ? "0%" : `calc(${(frac * 100).toFixed(4)}% - ${(frac * 4).toFixed(4)}rem)`;
+
   return (
     <div className="relative flex items-start w-full px-4">
       {/* Linea di sfondo che collega i pallini */}
       <div className="absolute top-4 left-8 right-8 h-px bg-base-content/10" />
       <div
         className="absolute top-4 left-8 h-px bg-primary/40 transition-all"
-        style={{
-          width: step === 0 ? "0%" : step === 1 ? "calc(50% - 2rem)" : "calc(100% - 4rem)",
-        }}
+        style={{ width: fillWidth }}
       />
 
       {STEP_LABELS.map((label, i) => (
