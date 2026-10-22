@@ -3,6 +3,7 @@ import { openDB, type DBSchema, type IDBPDatabase } from "idb";
 
 export interface AvvistamentoLocale {
   clientId: string; // UUID generato qui, chiave di idempotenza per la sync
+  clientRevision?: number;
   specie: string;
   tipologia: string;
   sesso: string;
@@ -31,14 +32,27 @@ function getDB() {
         const store = db.createObjectStore("outbox", { keyPath: "clientId" });
         store.createIndex("by-status", "syncStatus");
       },
+    }).catch((error: unknown) => {
+      dbPromise = null;
+      throw error;
     });
   }
   return dbPromise;
 }
 
-export async function salvaLocale(record: AvvistamentoLocale) {
+export async function salvaLocale(record: AvvistamentoLocale, esistente = false) {
   const db = await getDB();
-  await db.put("outbox", record);
+  const tx = db.transaction("outbox", "readwrite");
+  const precedente = await tx.store.get(record.clientId);
+  if (esistente && !precedente) {
+    await tx.done;
+    throw new Error("L'avvistamento è già stato sincronizzato o rimosso. Chiudi la modifica e aggiorna la coda.");
+  }
+  await tx.store.put({
+    ...record,
+    clientRevision: Math.max(precedente?.clientRevision ?? 0, record.clientRevision ?? 0) + 1,
+  });
+  await tx.done;
 }
 
 export async function elencaLocali(): Promise<AvvistamentoLocale[]> {
@@ -48,30 +62,31 @@ export async function elencaLocali(): Promise<AvvistamentoLocale[]> {
 
 export async function elencaInAttesa(): Promise<AvvistamentoLocale[]> {
   const db = await getDB();
-  return db.getAllFromIndex("outbox", "by-status", "pending");
+  const records = await db.getAll("outbox");
+  return records.filter(
+    (record) => record.syncStatus === "pending" ||
+      (record.syncStatus === "error" && record.syncRetryable !== false)
+  );
 }
 
 export async function aggiornaStatoSync(
-  clientId: string,
+  inviato: AvvistamentoLocale,
   status: "synced" | "error",
   detail?: { error?: string; retryable?: boolean }
 ) {
   const db = await getDB();
-  const record = await db.get("outbox", clientId);
-  if (!record) return;
-  record.syncStatus = status;
-  record.syncError = detail?.error;
-  record.syncRetryable = detail?.retryable;
-  await db.put("outbox", record);
-}
-
-export async function rimuoviSincronizzati() {
-  const db = await getDB();
   const tx = db.transaction("outbox", "readwrite");
-  let cursor = await tx.store.index("by-status").openCursor("synced");
-  while (cursor) {
-    await cursor.delete();
-    cursor = await cursor.continue();
+  const record = await tx.store.get(inviato.clientId);
+  // Una risposta tardiva non deve cancellare modifiche salvate durante l'invio.
+  if (record && JSON.stringify(record) === JSON.stringify(inviato)) {
+    if (status === "synced") {
+      await tx.store.delete(record.clientId);
+    } else {
+      record.syncStatus = status;
+      record.syncError = detail?.error;
+      record.syncRetryable = detail?.retryable;
+      await tx.store.put(record);
+    }
   }
   await tx.done;
 }

@@ -1,22 +1,27 @@
 // app/components/MapPickerModal.tsx
 "use client";
 
-import { useState } from "react";
-import { MapContainer, TileLayer, Marker, useMapEvents } from "react-leaflet";
+import { useEffect, useState } from "react";
+import { MapContainer, Marker, useMap, useMapEvents } from "react-leaflet";
 import type { LatLngLiteral } from "leaflet";
 import L from "leaflet";
+import "leaflet/dist/leaflet.css";
+import { aggiungiSfondoTrentino } from "@/app/lib/trentino-map";
 
-// Workaround necessario: Leaflet risolve i path delle icone di default
-// in modo relativo al proprio pacchetto, cosa che i bundler di Next.js
-// (webpack/turbopack) non gestiscono senza questo fix esplicito.
-delete (L.Icon.Default.prototype as any)._getIconUrl;
-L.Icon.Default.mergeOptions({
-  iconRetinaUrl: "https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon-2x.png",
-  iconUrl: "https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon.png",
-  shadowUrl: "https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png",
+const iconaPosizione = L.divIcon({
+  className: "",
+  html: '<svg xmlns="http://www.w3.org/2000/svg" width="32" height="40" viewBox="0 0 32 40"><path d="M16 1C7.7 1 1 7.7 1 16c0 11 15 23 15 23s15-12 15-23C31 7.7 24.3 1 16 1Z" fill="#2563eb" stroke="white" stroke-width="2"/><circle cx="16" cy="16" r="5" fill="white"/></svg>',
+  iconSize: [32, 40],
+  iconAnchor: [16, 40],
 });
 
 const CENTRO_TRENTO: LatLngLiteral = { lat: 46.0679, lng: 11.1211 };
+
+function SfondoTrentino() {
+  const map = useMap();
+  useEffect(() => aggiungiSfondoTrentino(L, map), [map]);
+  return null;
+}
 
 function ClickHandler({ onPick }: { onPick: (p: LatLngLiteral) => void }) {
   useMapEvents({
@@ -77,13 +82,11 @@ export function MapPickerModal({
             center={scelta ?? CENTRO_TRENTO}
             zoom={13}
             scrollWheelZoom
+            preferCanvas
+            maxBoundsViscosity={1}
             className="h-full w-full map-picker-theme"
           >
-            <TileLayer
-  attribution='Tiles &copy; Esri &mdash; Source: Esri, Maxar, Earthstar Geographics, and the GIS User Community'
-  url="https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}"
-  maxZoom={19}
-/>
+            <SfondoTrentino />
             <ClickHandler
               onPick={(p) => {
                 setScelta(p);
@@ -94,6 +97,7 @@ export function MapPickerModal({
             {scelta && (
               <Marker
                 position={scelta}
+                icon={iconaPosizione}
                 draggable
                 eventHandlers={{
                   dragend: (e) => {

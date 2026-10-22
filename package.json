@@ -6,7 +6,9 @@
     "dev": "next dev --turbopack",
     "build": "next build --webpack",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "test": "node tests/server-sync.cjs",
+    "test:offline": "node --test tests/offline-browser.cjs"
   },
   "dependencies": {
     "@serwist/next": "^9.5.12",

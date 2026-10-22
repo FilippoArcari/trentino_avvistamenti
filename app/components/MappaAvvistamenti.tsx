@@ -7,6 +7,7 @@ import { sessoAmmesso } from "@/app/utils/constant";
 
 import "leaflet/dist/leaflet.css";
 import type * as LeafletType from "leaflet";
+import { aggiungiSfondoTrentino } from "@/app/lib/trentino-map";
 
 // Simboli cosmetici per il sesso: legittimo tenerli in una mappa qui
 // perché sessoAmmesso è un dominio chiuso e canonico definito in
@@ -53,50 +54,51 @@ export function MappaAvvistamenti({
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<LeafletType.Map | null>(null);
   const layerRef = useRef<LeafletType.LayerGroup | null>(null);
+  const ultimiAvvistamenti = useRef(avvistamenti);
 
   useEffect(() => {
     if (!containerRef.current || mapRef.current) return;
+    let annullato = false;
+    let rimuoviSfondo: (() => void) | undefined;
 
     import("leaflet").then((L) => {
-      if (!containerRef.current || mapRef.current) return;
+      if (annullato || !containerRef.current || mapRef.current) return;
 
       const map = L.map(containerRef.current, {
         center: CENTRO_TRENTINO,
         zoom: 9,
         zoomControl: true,
         attributionControl: true,
+        preferCanvas: true,
+        maxBoundsViscosity: 1,
       });
-
-      L.tileLayer(
-        "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}",
-        {
-          attribution:
-            "Tiles &copy; Esri &mdash; Source: Esri, Maxar, Earthstar Geographics, and the GIS User Community",
-          maxZoom: 19,
-        }
-      ).addTo(map);
-
-      L.tileLayer(
-        "https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Boundaries_and_Places/MapServer/tile/{z}/{y}/{x}",
-        { maxZoom: 19, opacity: 0.8 }
-      ).addTo(map);
+      rimuoviSfondo = aggiungiSfondoTrentino(L, map);
 
       const layer = L.layerGroup().addTo(map);
       mapRef.current = map;
       layerRef.current = layer;
 
-      aggiornaMarker(L, layer, avvistamenti);
+      const records = ultimiAvvistamenti.current;
+      aggiornaMarker(L, layer, records);
+      if (records.length > 0) {
+        map.fitBounds(L.latLngBounds(records.map((a) => [a.posizione.lat, a.posizione.lng])), {
+          padding: [40, 40],
+          maxZoom: 13,
+        });
+      }
     });
 
     return () => {
+      annullato = true;
+      rimuoviSfondo?.();
       mapRef.current?.remove();
       mapRef.current = null;
       layerRef.current = null;
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   useEffect(() => {
+    ultimiAvvistamenti.current = avvistamenti;
     if (!layerRef.current) return;
     import("leaflet").then((L) => {
       if (!layerRef.current) return;

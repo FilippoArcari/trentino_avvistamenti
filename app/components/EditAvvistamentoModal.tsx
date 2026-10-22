@@ -39,12 +39,16 @@ export function EditAvvistamentoModal({
     sessoAmmesso.includes(initialData.sesso) ? initialData.sesso : sessoAmmesso[0]
   );
   const [isSaving, setIsSaving] = useState(false);
+  const [errore, setErrore] = useState<string | null>(null);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setIsSaving(true);
+    setErrore(null);
     try {
       await onSave({ ...initialData, specie, tipologia, sesso });
+    } catch (error: unknown) {
+      setErrore(error instanceof Error ? error.message : "Salvataggio non riuscito. Riprova.");
     } finally {
       setIsSaving(false);
     }
@@ -124,6 +128,8 @@ export function EditAvvistamentoModal({
               ))}
             </div>
           </fieldset>
+
+          {errore && <p role="alert" className="text-sm text-error">{errore}</p>}
 
           <div className="flex justify-end gap-3 mt-4">
             <button

@@ -30,6 +30,12 @@ export function Navbar() {
               <Link
                 key={href}
                 href={href}
+                onNavigate={(event) => {
+                  if (!navigator.onLine) {
+                    event.preventDefault();
+                    window.location.assign(href);
+                  }
+                }}
                 className={`px-4 py-2 rounded-xl text-sm font-medium transition-all ${
                   active
                     ? "bg-primary/20 text-success border border-primary/30"
@@ -70,6 +76,12 @@ export function Navbar() {
                 <Link
                   key={href}
                   href={href}
+                  onNavigate={(event) => {
+                    if (!navigator.onLine) {
+                      event.preventDefault();
+                      window.location.assign(href);
+                    }
+                  }}
                   onClick={() => setIsMenuOpen(false)}
                   className={`px-4 py-3 rounded-xl text-base font-medium transition-all ${
                     active

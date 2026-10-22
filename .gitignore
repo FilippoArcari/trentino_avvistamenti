@@ -39,3 +39,8 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# serwist: file generati al build, non vanno versionati
+/public/sw.js
+/public/sw.js.map
+/public/swe-worker-*.js

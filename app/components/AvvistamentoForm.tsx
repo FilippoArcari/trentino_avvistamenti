@@ -32,7 +32,7 @@ export function AvvistamentoForm({
   tipologieAmmesse,
   sessoAmmesso,
 }: AvvistamentoFormProps) {
-  const { flush, inCorso } = useSync();
+  const { flush, inCorso, online } = useSync();
 
   const [step, setStep] = useState<Step>(0);
 
@@ -94,7 +94,7 @@ export function AvvistamentoForm({
     // Guardia esplicita, non solo il disabled sul bottone: il disabled protegge
     // dal click dell'utente, ma non da un submit programmatico (es. invio da
     // tastiera su un campo del form) che aggirasse lo stato del bottone.
-    if (!tipologia) {
+    if (isSaving || !tipologia) {
       return;
     }
 
@@ -150,6 +150,12 @@ export function AvvistamentoForm({
   return (
     <div className="w-full max-w-lg mx-auto flex flex-col gap-6">
       <StepIndicator step={step} />
+
+      {online === false && (
+        <p role="status" className="rounded-xl border border-warning/30 bg-warning/10 px-4 py-3 text-sm text-base-content">
+          Sei offline. Gli avvistamenti vengono salvati sul dispositivo e inviati automaticamente al ritorno della connessione.
+        </p>
+      )}
 
       {step === 0 && (
         <StepSpecie
@@ -293,12 +299,12 @@ export function AvvistamentoForm({
             <h2 className="text-lg font-semibold text-base-content">
               Avvistamento registrato
             </h2>
-            <p className="text-sm text-base-content/60">
+            <p role="status" className="text-sm text-base-content/60">
               {specie} — {sesso} — {tipologia}
               <br />
               {inCorso
                 ? "Sincronizzazione in corso…"
-                : "Salvato localmente, verrà sincronizzato."}
+                : "Salvato sul dispositivo. L'invio avviene automaticamente quando la connessione è disponibile."}
             </p>
           </div>
 
@@ -409,7 +415,7 @@ function StepSesso({
   return (
     <div className="flex flex-col gap-4">
       <h2 className="text-center text-lg font-semibold text-base-content">
-        Sesso dell'animale
+        Sesso dell&apos;animale
       </h2>
       <div className="grid grid-cols-1 gap-4">
         {sessoAmmesso.map((s) => (

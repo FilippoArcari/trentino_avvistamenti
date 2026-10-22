@@ -9,6 +9,7 @@ import Link from "next/link";
 import { hslaSpecie, etichettaSpecie } from "@/app/utils/speciesColor";
 import { EditAvvistamentoModal, type EditableAvvistamento } from "@/app/components/EditAvvistamentoModal";
 import { type Sesso, sessoAmmesso, specieAmmesse, type Specie } from "../utils/constant";
+import { useSync } from "@/app/hooks/useSync";
 
 // Leaflet richiede il DOM — import dinamico senza SSR
 const MappaAvvistamenti = dynamic(
@@ -41,6 +42,7 @@ function MapSkeleton() {
 }
 
 export function DashboardClient() {
+  const { online, ultimoEsito } = useSync();
   const [avvistamenti, setAvvistamenti] = useState<Avvistamento[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -52,9 +54,6 @@ export function DashboardClient() {
   const [filtroDataA, setFiltroDataA] = useState("");
 
   const loadData = useCallback(() => {
-    setLoading(true);
-    setError(null);
-
     const params = new URLSearchParams();
     if (filtroSpecie) params.set("specie", filtroSpecie);
     if (filtroSesso) params.set("sesso", filtroSesso);
@@ -69,6 +68,8 @@ export function DashboardClient() {
       })
       .then((data: Avvistamento[]) => {
         setAvvistamenti(data);
+        setPagina(1);
+        setError(null);
         setLoading(false);
       })
       .catch((e: unknown) => {
@@ -77,12 +78,10 @@ export function DashboardClient() {
       });
   }, [filtroSpecie, filtroSesso, filtroDataDa, filtroDataA]);
 
-  // Rifà la fetch ogni volta che cambia un filtro (loadData cambia identità perché
-  // dipende dai filtri) e riporta la paginazione a pagina 1 sul nuovo set di risultati.
+  // Aggiorna i dati al cambio dei filtri, della connessione e dopo la sync.
   useEffect(() => {
-    setPagina(1);
     loadData();
-  }, [loadData]);
+  }, [loadData, online, ultimoEsito]);
 
   const handleSaveEdit = async (updated: EditableAvvistamento) => {
     if (!updated._id) return;
@@ -158,7 +157,7 @@ export function DashboardClient() {
         {/* ── Error state ────────────────────────────────────── */}
         {error && (
           <div className="mb-8 rounded-2xl border border-error/20 bg-error/10 px-5 py-4 text-error text-sm">
-            {error}
+            {online === false ? "Gli avvistamenti sul server non sono disponibili senza rete. Puoi comunque consultare la mappa del Trentino." : error}
           </div>
         )}
 
@@ -210,17 +209,12 @@ export function DashboardClient() {
         )}
 
         {/* ── Main grid ───────────────────────────────────────── */}
-        {(loading || avvistamenti.length > 0) && (
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
             {/* Mappa — occupa 2/3 su schermi grandi */}
             <div className="lg:col-span-2">
               <PanelCard title="Mappa degli avvistamenti">
                 <div className="h-[420px] rounded-xl overflow-hidden">
-                  {loading ? (
-                    <MapSkeleton />
-                  ) : (
-                    <MappaAvvistamenti avvistamenti={avvistamenti} />
-                  )}
+                  <MappaAvvistamenti avvistamenti={avvistamenti} />
                 </div>
               </PanelCard>
             </div>
@@ -240,7 +234,6 @@ export function DashboardClient() {
               </PanelCard>
             </div>
           </div>
-        )}
 
         {/* ── Tabella avvistamenti ──────────────────────── */}
         {!loading && avvistamenti.length > 0 && (

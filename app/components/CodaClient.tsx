@@ -1,8 +1,8 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { Navbar } from "@/app/components/Navbar";
-import { elencaInAttesa, salvaLocale, eliminaLocale, type AvvistamentoLocale } from "@/app/lib/offline-db";
+import { elencaLocali, salvaLocale, eliminaLocale, type AvvistamentoLocale } from "@/app/lib/offline-db";
 import { EditAvvistamentoModal, type EditableAvvistamento } from "@/app/components/EditAvvistamentoModal";
 import { useSync } from "@/app/hooks/useSync";
 import { hslaSpecie, etichettaSpecie } from "@/app/utils/speciesColor";
@@ -11,28 +11,23 @@ import { hslaSpecie, etichettaSpecie } from "@/app/utils/speciesColor";
 export function CodaClient() {
   const [avvistamenti, setAvvistamenti] = useState<AvvistamentoLocale[]>([]);
   const [loading, setLoading] = useState(true);
+  const [erroreCoda, setErroreCoda] = useState<string | null>(null);
   const [editingRecord, setEditingRecord] = useState<AvvistamentoLocale | null>(null);
 
-  const { flush, inCorso, ultimoEsito } = useSync();
+  const { flush, online, inCorso, ultimoEsito, errore } = useSync();
 
-  const loadData = async () => {
-    try {
-      const records = await elencaInAttesa();
-      setAvvistamenti(records.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()));
-    } catch (e) {
-      console.error(e);
-    } finally {
-      setLoading(false);
-    }
-  };
+  const loadData = useCallback(() => {
+    return elencaLocali().then((records) => {
+      setAvvistamenti(records.filter((record) => record.syncStatus !== "synced").sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()));
+      setErroreCoda(null);
+    }).catch(() => {
+      setErroreCoda("Impossibile leggere gli avvistamenti salvati sul dispositivo. Riprova ricaricando la pagina.");
+    }).finally(() => setLoading(false));
+  }, []);
 
   useEffect(() => {
-    loadData();
-    // Aggiorna la lista quando la sync finisce (i record potrebbero sparire perché sincronizzati)
-    if (!inCorso) {
-      loadData();
-    }
-  }, [inCorso]);
+    void loadData();
+  }, [inCorso, loadData]);
 
   const handleSaveEdit = async (updated: EditableAvvistamento) => {
     if (!editingRecord) return;
@@ -42,9 +37,10 @@ export function CodaClient() {
       tipologia: updated.tipologia,
       sesso: updated.sesso,
       syncStatus: "pending", // reset status if edited
-      syncError: undefined
+      syncError: undefined,
+      syncRetryable: undefined,
     };
-    await salvaLocale(recordSalvato);
+    await salvaLocale(recordSalvato, true);
     setEditingRecord(null);
     await loadData();
     flush(); // tenta la sync subito dopo la modifica
@@ -52,8 +48,12 @@ export function CodaClient() {
 
   const handleDelete = async (clientId: string) => {
     if (!confirm("Sei sicuro di voler eliminare questo record in coda?")) return;
-    await eliminaLocale(clientId);
-    await loadData();
+    try {
+      await eliminaLocale(clientId);
+      await loadData();
+    } catch {
+      setErroreCoda("Eliminazione non riuscita. L'avvistamento è ancora sul dispositivo.");
+    }
   };
 
   return (
@@ -72,12 +72,20 @@ export function CodaClient() {
           </div>
           <button
             onClick={() => flush()}
-            disabled={inCorso}
+            disabled={inCorso || online === false}
             className="px-4 py-2 rounded-xl bg-base-content/5 border border-base-content/10 hover:bg-base-content/10 text-sm font-medium transition-all disabled:opacity-50"
           >
-            {inCorso ? "Sincronizzazione in corso..." : "Forza Sync"}
+            {inCorso ? "Sincronizzazione in corso..." : "Sincronizza ora"}
           </button>
         </div>
+
+        {(online === false || errore) && (
+          <p role="status" className="mb-6 rounded-xl border border-warning/30 bg-warning/10 p-4 text-sm">
+            {online === false
+              ? "Sei offline. Gli avvistamenti restano sul dispositivo e saranno inviati automaticamente al ritorno della connessione."
+              : errore}
+          </p>
+        )}
 
         {ultimoEsito && (
           <div className="mb-6 rounded-xl border border-base-content/10 bg-base-content/5 p-4 flex gap-4 text-sm">
@@ -88,10 +96,12 @@ export function CodaClient() {
           </div>
         )}
 
+        {erroreCoda && <p role="alert" className="mb-6 text-sm text-error">{erroreCoda}</p>}
+
         <div className="rounded-2xl border border-base-content/5 bg-base-content/[0.03] overflow-hidden">
           {loading ? (
             <div className="p-8 flex justify-center text-base-content/60">Caricamento...</div>
-          ) : avvistamenti.length === 0 ? (
+          ) : erroreCoda ? null : avvistamenti.length === 0 ? (
             <div className="p-12 flex flex-col items-center justify-center text-center">
               <div className="w-16 h-16 rounded-full bg-primary/10 flex items-center justify-center mb-4">
                 <svg className="w-8 h-8 text-success" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -139,7 +149,10 @@ export function CodaClient() {
                       </td>
                       <td className="py-4 px-4">
                         {a.syncStatus === "error" ? (
-                          <span className="text-error text-xs px-2 py-1 rounded-full bg-error/10" title={a.syncError}>Errore</span>
+                          <span className="text-error text-xs" title={a.syncError}>
+                            {a.syncRetryable === false ? "Da correggere" : "Invio da ritentare"}
+                            {a.syncError && <span className="block mt-1">{a.syncError}</span>}
+                          </span>
                         ) : (
                           <span className="text-warning text-xs px-2 py-1 rounded-full bg-warning/10">In attesa</span>
                         )}
