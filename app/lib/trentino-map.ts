@@ -36,14 +36,28 @@ const STILI: Record<string, Leaflet.PathOptions> = {
   trail: { color: "#b2a991", weight: 1, dashArray: "2 4" },
 };
 
-// Il GeoJSON è un estratto regionale incluso nell'app: non dipende dalle
-// tessere già visitate. Le immagini satellitari restano un'opzione online.
+// Le foto aeree e il GeoJSON sono inclusi nell'app per tutto il Trentino:
+// non dipendono dalle zone già visitate. Esri aggiunge il dettaglio online.
 export function aggiungiSfondoTrentino(L: typeof Leaflet, map: Leaflet.Map) {
   let attivo = true;
   let cartografiaPronta = false;
   let punti: Cartografia["features"] = [];
   const locale = L.layerGroup();
   const etichette = L.layerGroup().addTo(locale);
+  // I mosaici da 1024 px coprono quattro tessere standard per lato.
+  // Lo zoom URL è quindi due livelli sotto quello della mappa Leaflet.
+  const fotoOffline = L.tileLayer("/maps/satellite/{z}/{x}/{y}.webp", {
+    tileSize: 1024,
+    zoomOffset: -2,
+    detectRetina: false,
+    minNativeZoom: 8,
+    maxNativeZoom: 14,
+    maxZoom: 19,
+    noWrap: true,
+    bounds: LIMITI_TRENTINO,
+    errorTileUrl: "data:image/gif;base64,R0lGODlhAQABAAD/ACwAAAAAAQABAAACADs=",
+    attribution: '<a href="https://www.provincia.tn.it/News/Approfondimenti/Ortofoto-digitale-2015">Ortofoto 2015 · Servizio Geologico – PAT</a> · <a href="/maps/README.md">CC BY 3.0 IT</a>',
+  });
   const satellite = L.layerGroup([
     L.tileLayer(
       "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}",
@@ -62,7 +76,7 @@ export function aggiungiSfondoTrentino(L: typeof Leaflet, map: Leaflet.Map) {
   map.setMaxBounds(L.latLngBounds(LIMITI_TRENTINO).pad(0.04));
   map.setMinZoom(8);
   map.setMaxZoom(19);
-  map.getContainer().style.backgroundColor = "#eef1e8";
+  map.getContainer().style.backgroundColor = "#17251c";
 
   const stato = document.createElement("div");
   stato.className = "leaflet-bar bg-base-100 text-base-content px-3 py-2 text-xs max-w-[210px]";
@@ -73,27 +87,36 @@ export function aggiungiSfondoTrentino(L: typeof Leaflet, map: Leaflet.Map) {
   L.DomEvent.disableClickPropagation(stato);
 
   const selettore = L.control.layers({
-    "Trentino (offline)": locale,
-    "Satellite (online)": satellite,
+    "Satellite (offline)": fotoOffline,
+    "Satellite HD (online)": satellite,
+    "Cartografica": locale,
   }).addTo(map);
   const scala = L.control.scale({ imperial: false }).addTo(map);
-  (navigator.onLine ? satellite : locale).addTo(map);
+  (navigator.onLine ? satellite : fotoOffline).addTo(map);
 
   function aggiornaStato() {
+    if (map.hasLayer(fotoOffline)) {
+      stato.textContent = "Satellite offline · foto 2015";
+      return;
+    }
     if (!cartografiaPronta && !map.hasLayer(satellite)) {
       stato.textContent = "Caricamento mappa del Trentino…";
       return;
     }
     stato.textContent = map.hasLayer(satellite)
-      ? "Satellite · connessione richiesta"
-      : "Mappa offline del Trentino";
+      ? "Satellite HD · online"
+      : "Cartografia offline del Trentino";
   }
 
-  function mostraMappaLocale() {
+  function mostraFotoOffline() {
     if (!attivo) return;
     map.removeLayer(satellite);
-    if (!map.hasLayer(locale)) locale.addTo(map);
+    if (!map.hasLayer(fotoOffline)) fotoOffline.addTo(map);
     aggiornaStato();
+  }
+
+  function allaDisconnessione() {
+    if (map.hasLayer(satellite)) mostraFotoOffline();
   }
 
   function aggiornaEtichette() {
@@ -118,10 +141,11 @@ export function aggiungiSfondoTrentino(L: typeof Leaflet, map: Leaflet.Map) {
     }
   }
 
-  satellite.eachLayer((layer) => layer.on("tileerror", mostraMappaLocale));
-  window.addEventListener("offline", mostraMappaLocale);
+  satellite.eachLayer((layer) => layer.on("tileerror", allaDisconnessione));
+  window.addEventListener("offline", allaDisconnessione);
   map.on("baselayerchange", aggiornaStato);
   map.on("moveend", aggiornaEtichette);
+  aggiornaStato();
 
   caricaCartografia().then((data) => {
     if (!attivo) return;
@@ -136,19 +160,22 @@ export function aggiungiSfondoTrentino(L: typeof Leaflet, map: Leaflet.Map) {
     aggiornaEtichette();
     aggiornaStato();
   }).catch(() => {
-    if (attivo) stato.textContent = "Mappa locale non disponibile. Riconnettiti per scaricarla.";
+    if (attivo && map.hasLayer(locale)) {
+      stato.textContent = "Cartografia non disponibile. Riconnettiti per scaricarla.";
+    }
   });
 
   return () => {
     attivo = false;
-    window.removeEventListener("offline", mostraMappaLocale);
+    window.removeEventListener("offline", allaDisconnessione);
     map.off("baselayerchange", aggiornaStato);
     map.off("moveend", aggiornaEtichette);
-    satellite.eachLayer((layer) => layer.off("tileerror", mostraMappaLocale));
+    satellite.eachLayer((layer) => layer.off("tileerror", allaDisconnessione));
     selettore.remove();
     scala.remove();
     indicatore.remove();
     satellite.remove();
+    fotoOffline.remove();
     locale.remove();
   };
 }

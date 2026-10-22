@@ -59,7 +59,12 @@ test("salvataggio offline, mappa, persistenza, retry e sincronizzazione da dashb
   page.setDefaultTimeout(10_000);
   let mode = "ok";
   let release;
+  let richiesteHd = 0;
   const sent = [];
+  await context.route("https://server.arcgisonline.com/**", (route) => {
+    richiesteHd++;
+    return route.abort("failed");
+  });
   await context.route(/\/api\/avvistamenti(?:[/?]|$)/, async (route) => {
     if (!route.request().url().endsWith("/sync")) {
       return route.fulfill({ json: [] });
@@ -88,6 +93,17 @@ test("salvataggio offline, mappa, persistenza, retry e sincronizzazione da dashb
     });
     assert.equal(await page.evaluate(async () => Boolean(await caches.match("/maps/trentino.geojson", { ignoreSearch: true }))), true,
       "La cartografia di tutto il Trentino è disponibile prima di visitare la mappa");
+    const satelliteInCache = await page.evaluate(async () => {
+      const manifest = await fetch("/maps/satellite/manifest.json").then((response) => response.json());
+      const mancanti = [];
+      for (const tile of manifest.tiles) {
+        const url = tile.startsWith("/") ? tile : `/maps/satellite/${tile}`;
+        if (!await caches.match(url, { ignoreSearch: true })) mancanti.push(url);
+      }
+      return { totale: manifest.tiles.length, mancanti };
+    });
+    assert.ok(satelliteInCache.totale > 200, "Piramide fotografica di tutto il Trentino inclusa");
+    assert.deepEqual(satelliteInCache.mancanti, [], "Tutte le foto sono salvate prima di visitare le zone");
     console.log("Service worker pronto, registro offline");
     await context.setOffline(true);
     await page.getByRole("button", { name: "Cervo", exact: true }).click();
@@ -96,8 +112,20 @@ test("salvataggio offline, mappa, persistenza, retry e sincronizzazione da dashb
     await page.getByRole("button", { name: "Adulto", exact: true }).click();
     await page.getByRole("button", { name: "Imposta manualmente" }).click();
     console.log("Picker mappa aperto");
-    await page.getByText("Mappa offline del Trentino", { exact: true }).waitFor();
-    assert.ok(await page.locator(".leaflet-overlay-pane canvas").count(), "Geometrie locali disegnate senza connessione");
+    await page.getByText("Satellite offline · foto 2015", { exact: true }).waitFor();
+    await page.waitForFunction(() => [...document.querySelectorAll("img.leaflet-tile-loaded")].some((tile) =>
+      tile.src.includes("/maps/satellite/") && tile.naturalWidth === 1024));
+    assert.equal(await page.locator(".leaflet-tile-pane img[src*='server.arcgisonline.com']").count(), 0,
+      "Offline viene usato lo sfondo fotografico locale");
+    await page.locator(".leaflet-control-layers").hover();
+    await page.getByRole("radio", { name: "Cartografica", exact: true }).check();
+    await page.getByText("Cartografia offline del Trentino", { exact: true }).waitFor();
+    await context.setOffline(false);
+    await page.locator(".leaflet-control-layers").hover();
+    await page.getByRole("radio", { name: "Satellite HD (online)", exact: true }).check();
+    await until(() => richiesteHd > 0, "Richiesta della vista HD online");
+    await page.getByText("Satellite offline · foto 2015", { exact: true }).waitFor();
+    await context.setOffline(true);
     await page.getByPlaceholder("Lat (es. 46.0679)").fill("46.0679");
     await page.getByPlaceholder("Lng (es. 11.1211)").fill("11.1211");
     await page.getByPlaceholder("Lng (es. 11.1211)").blur();
@@ -117,7 +145,7 @@ test("salvataggio offline, mappa, persistenza, retry e sincronizzazione da dashb
     await page.getByRole("cell", { name: "In attesa", exact: true }).waitFor();
     await page.getByRole("link", { name: "Dashboard", exact: true }).first().click();
     await page.getByRole("heading", { name: "Dashboard Avvistamenti" }).waitFor();
-    await page.getByText("Mappa offline del Trentino", { exact: true }).waitFor();
+    await page.getByText("Satellite offline · foto 2015", { exact: true }).waitFor();
     await page.evaluate(() => { window.testNoReload = true; });
     console.log("Dashboard offline pronta, verifico retry");
     mode = "retry";
